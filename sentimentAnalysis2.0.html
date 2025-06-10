@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>J.A.R.V.I.S. Journal System</title>
+    
+    <!-- Import Sci-Fi Fonts from Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Rajdhani:wght@400;600&display=swap" rel="stylesheet">
+
+    <!-- JavaScript libraries for sentiment analysis and machine learning -->
+    <script src="https://unpkg.com/sentiment@5/lib/index.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/svm@0.1.1/lib/svm.js"></script>
+
+    <style>
+        /* --- Base Setup & Theming --- */
+        :root {
+            --primary-color: #00f6ff;
+            --secondary-color: #3d8bff;
+            --dark-bg: #030a1a;
+            --panel-bg: rgba(20, 40, 70, 0.25);
+            --glow-color: rgba(0, 246, 255, 0.7);
+            --font-main: 'Orbitron', sans-serif;
+            --font-body: 'Rajdhani', sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--dark-bg);
+            color: var(--primary-color);
+            font-family: var(--font-body);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 2rem;
+            background-image:
+                linear-gradient(rgba(0, 246, 255, 0.05) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 246, 255, 0.05) 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+
+        /* --- Main App Container --- */
+        .app-container {
+            width: 100%;
+            max-width: 1200px;
+            height: 90vh;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: auto 1fr auto;
+            gap: 1.5rem;
+            grid-template-areas:
+                "header header"
+                "input output"
+                "actions output";
+            padding: 1.5rem;
+            border: 1px solid var(--secondary-color);
+            background: var(--panel-bg);
+            backdrop-filter: blur(5px);
+            clip-path: polygon(0 20px, 20px 0, calc(100% - 20px) 0, 100% 20px, 100% calc(100% - 20px), calc(100% - 20px) 100%, 20px 100%, 0 calc(100% - 20px));
+            box-shadow: 0 0 35px var(--glow-color);
+        }
+
+        /* --- General Panel Styling (recreating the image frames) --- */
+        .panel {
+            background: rgba(0,0,0,0.2);
+            border: 1px solid var(--secondary-color);
+            position: relative;
+            padding: 1.5rem;
+            clip-path: polygon(0 15px, 15px 0, calc(100% - 15px) 0, 100% 15px, 100% 100%, 0 100%);
+        }
+
+        .panel::before, .panel::after {
+            content: '';
+            position: absolute;
+            width: 15px;
+            height: 15px;
+            background: transparent;
+        }
+        .panel::before {
+            bottom: -1px;
+            left: -1px;
+            border-bottom: 2px solid var(--primary-color);
+            border-left: 2px solid var(--primary-color);
+        }
+        .panel::after {
+            bottom: -1px;
+            right: -1px;
+            border-bottom: 2px solid var(--primary-color);
+            border-right: 2px solid var(--primary-color);
+        }
+
+        .panel-title {
+            font-family: var(--font-main);
+            font-size: 1.2rem;
+            margin-bottom: 1rem;
+            color: var(--primary-color);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            text-shadow: 0 0 5px var(--glow-color);
+        }
+        
+        /* --- Grid Area Layout --- */
+        #header { grid-area: header; text-align: center; padding: 0.5rem; }
+        #input-panel { grid-area: input; display: flex; flex-direction: column; }
+        #actions-panel { grid-area: actions; }
+        #output-panel { grid-area: output; display: flex; flex-direction: column;}
+        
+        #header .panel-title { margin-bottom: 0; font-size: 1.8rem; }
+
+        /* --- Input & Text Area Styling --- */
+        .form-group {
+            margin-bottom: 1rem;
+            display: flex;
+            flex-direction: column;
+        }
+        .form-group label {
+            margin-bottom: 0.5rem;
+            font-family: var(--font-body);
+            font-weight: 600;
+            font-size: 1rem;
+            color: var(--secondary-color);
+        }
+        .hud-input, .hud-textarea {
+            background: transparent;
+            border: none;
+            border-bottom: 1px solid var(--secondary-color);
+            color: #fff;
+            font-family: var(--font-body);
+            font-size: 1rem;
+            padding: 0.5rem;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+        .hud-input:focus, .hud-textarea:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 1px 0 var(--primary-color);
+        }
+        .hud-textarea {
+            flex-grow: 1;
+            resize: none;
+            border: 1px solid var(--secondary-color);
+        }
+
+        /* --- Button Styling --- */
+        .actions-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 1rem;
+            height: 100%;
+        }
+        .hud-button {
+            background: transparent;
+            border: 1px solid var(--primary-color);
+            color: var(--primary-color);
+            font-family: var(--font-main);
+            font-size: 1rem;
+            padding: 0.8rem 1rem;
+            cursor: pointer;
+            text-transform: uppercase;
+            position: relative;
+            transition: all 0.3s;
+            clip-path: polygon(0 10px, 10px 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+        }
+        .hud-button:hover {
+            background: var(--glow-color);
+            color: var(--dark-bg);
+            box-shadow: 0 0 20px var(--glow-color);
+        }
+
+        /* --- Output Panel & Custom Scrollbar --- */
+        #output-display {
+            flex-grow: 1;
+            background: rgba(0,0,0,0.4);
+            padding: 1rem;
+            font-family: 'Courier New', Courier, monospace;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            overflow-y: auto;
+            border: 1px solid var(--secondary-color);
+        }
+
+        ::-webkit-scrollbar {
+            width: 10px;
+        }
+        ::-webkit-scrollbar-track {
+            background: var(--dark-bg);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: var(--secondary-color);
+            border-radius: 5px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--primary-color);
+        }
+        
+        @media (max-width: 900px) {
+            body { padding: 1rem; }
+            .app-container {
+                grid-template-columns: 1fr;
+                grid-template-rows: auto auto auto 1fr;
+                grid-template-areas: 
+                    "header"
+                    "input"
+                    "actions"
+                    "output";
+                height: auto;
+                max-height: 95vh;
+            }
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="app-container">
+        <header id="header" class="panel">
+            <h1 class="panel-title">AI SENTIMENT ANALYSIS CORE</h1>
+        </header>
+
+        <section id="input-panel" class="panel">
+            <h2 class="panel-title">//: New Log Entry</h2>
+            <div class="form-group" style="flex-grow: 1; display: flex; flex-direction: column;">
+                <label for="journal-title">Entry Title / Subject</label>
+                <input type="text" id="journal-title" class="hud-input">
+            </div>
+            <div class="form-group" style="flex-grow: 3; display: flex; flex-direction: column;">
+                <label for="journal-entry">Entry Content</label>
+                <textarea id="journal-entry" class="hud-textarea"></textarea>
+            </div>
+        </section>
+
+        <section id="actions-panel" class="panel">
+             <h2 class="panel-title">//: System Directives</h2>
+             <div class="actions-grid">
+                <button id="save-btn" class="hud-button">Commit Entry to Log</button>
+                <button id="analyze-btn" class="hud-button">Process All Logs</button>
+                <button id="train-btn" class="hud-button">Run Predictive Analysis</button>
+             </div>
+        </section>
+
+        <section id="output-panel" class="panel">
+            <h2 class="panel-title">//: System Output</h2>
+            <div id="output-display">Welcome to the Journaling System. Awaiting directives...</div>
+        </section>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        // --- DOM Element References ---
+        const titleInput = document.getElementById('journal-title');
+        const entryInput = document.getElementById('journal-entry');
+        const outputDisplay = document.getElementById('output-display');
+        const saveBtn = document.getElementById('save-btn');
+        const analyzeBtn = document.getElementById('analyze-btn');
+        const trainBtn = document.getElementById('train-btn');
+
+        // --- JavaScript Sentiment Analyzer ---
+        const sentiment = new Sentiment();
+
+        // --- Helper function to update the output display ---
+        function updateOutput(message) {
+            outputDisplay.textContent = `> ${message}`;
+        }
+        
+        updateOutput('System initialized. LocalStorage connection active. Ready for input.');
+
+        // --- 1. Save Journal Entry ---
+        saveBtn.addEventListener('click', () => {
+            const title = titleInput.value.trim();
+            const entry = entryInput.value.trim();
+
+            if (!title || !entry) {
+                updateOutput('ERROR: Title and Entry content are required.');
+                return;
+            }
+
+            const timestamp = new Date().toISOString();
+            const journalEntry = { title, entry, timestamp };
+
+            // Get existing journals from localStorage or initialize an empty array
+            const journals = JSON.parse(localStorage.getItem('journals')) || [];
+            journals.push(journalEntry);
+
+            // Save back to localStorage
+            localStorage.setItem('journals', JSON.stringify(journals));
+
+            updateOutput(`SUCCESS: Entry "${title}" saved to local log.\nTotal entries: ${journals.length}`);
+            titleInput.value = '';
+            entryInput.value = '';
+        });
+
+        // --- 2. Analyze Sentiment of All Entries ---
+        analyzeBtn.addEventListener('click', () => {
+            const journals = JSON.parse(localStorage.getItem('journals')) || [];
+            if (journals.length === 0) {
+                updateOutput('INFO: No journal entries found in local log to analyze.');
+                return;
+            }
+            
+            updateOutput(`Processing ${journals.length} entries...`);
+
+            const scores = {};
+            journals.forEach(entry => {
+                const result = sentiment.analyze(entry.entry);
+                const entryId = `${entry.title}_${entry.timestamp}`;
+                // 'score' from sentiment.js is similar to 'compound' from VADER
+                scores[entryId] = {
+                    score: result.score, 
+                    positive: result.positive, // words
+                    negative: result.negative  // words
+                };
+            });
+
+            localStorage.setItem('journal_scores', JSON.stringify(scores));
+            updateOutput(`SUCCESS: Analysis complete. ${Object.keys(scores).length} scores calculated and stored.`);
+        });
+
+        // --- 3. Train and Evaluate SVM Model ---
+        trainBtn.addEventListener('click', () => {
+            const scoresData = JSON.parse(localStorage.getItem('journal_scores'));
+            if (!scoresData || Object.keys(scoresData).length < 5) {
+                updateOutput('ERROR: Insufficient data. Need at least 5 analyzed entries to train predictive model.');
+                return;
+            }
+            
+            updateOutput('Initializing predictive model training...');
+
+            let X = [];
+            let y = [];
+
+            for (const key in scoresData) {
+                const score = scoresData[key].score;
+                // We use the raw score as a feature. A more complex model could use more features.
+                X.push([score]); 
+                
+                let label = 0; // Neutral
+                if (score > 0.5) label = 1; // Positive
+                else if (score < -0.5) label = -1; // Negative
+                y.push(label);
+            }
+            
+            // Simple split for demonstration. 70% train, 30% test.
+            const splitIndex = Math.floor(X.length * 0.7);
+            const x_train = X.slice(0, splitIndex);
+            const y_train = y.slice(0, splitIndex);
+            const x_test = X.slice(splitIndex);
+            const y_test = y.slice(splitIndex);
+
+            if (x_test.length === 0) {
+                updateOutput('ERROR: Not enough data to create a test set. Please add more entries.');
+                return;
+            }
+
+            const svm = new SVM();
+            svm.train(x_train, y_train, { C: 1.0 }); // Train the model
+            
+            const y_pred = svm.predict(x_test);
+
+            // --- Calculate and Display Metrics ---
+            let correct = 0;
+            for(let i = 0; i < y_test.length; i++) {
+                if (y_test[i] === y_pred[i]) {
+                    correct++;
+                }
+            }
+            const accuracy = (correct / y_test.length) * 100;
+
+            let report = `--- PREDICTIVE ANALYSIS REPORT ---\n\n`;
+            report += `Model: Support Vector Machine (SVM)\n`;
+            report += `Training Entries: ${x_train.length}\n`;
+            report += `Testing Entries: ${x_test.length}\n\n`;
+            report += `MODEL ACCURACY: ${accuracy.toFixed(2)}%\n\n`;
+            report += `--- Test Set Detail ---\n`;
+            report += `Actual vs. Predicted (1:Pos, 0:Neu, -1:Neg)\n`;
+            y_test.forEach((actual, i) => {
+                report += ` Entry #${i+1}: Actual: ${actual}, Predicted: ${y_pred[i]}\n`;
+            });
+
+            updateOutput(report);
+        });
+
+    });
+    </script>
+
+</body>
+</html>
